@@ -1,6 +1,5 @@
 # -*- coding : utf-8 -*-
 # filename : 
-# D:\mydoc\SkyDrive\Document\cloudstack-db-monitor
 
 
 import os
@@ -15,14 +14,64 @@ from sqlalchemy.dialects.sqlite import \
             INTEGER, NUMERIC, SMALLINT, TEXT, TIME, TIMESTAMP, \
             VARCHAR
 
+class CloudStackDb:
+    def __init__( self , conn_str ):
+        if conn_str is None:
+            print "cloudstatic mysql initialize error with no conn str "
+            sys.exit( 0 );   
+        self.conn_str = conn_str
+        self.engine = create_engine( self.conn_str,strategy='threadlocal', encoding='utf8', convert_unicode=True, echo = True) 
+        self.engine.echo = False
+        self.metadata = MetaData( self.engine )
+        self.metadata.bind = self.engine
+        self.conn = self.engine.connect()
+        # configure Session class with desired options
+        Session = sessionmaker()
+        Session.configure(bind=self.engine)
+        self.session = Session()      
+            
 class CloudStackDbMonitor:
     '''
     just monitor add/delete row changes 
     can not monitor update change.
     data is stored in sqlite .
     '''
-    def __init__(self , conn_str =None ):
-        pass
+    def __init__(self , sqlite_conn_str =None , cs_conn_str = None ):
+        if cs_conn_str is None:
+            print "cloudstack mysql initialize error with no conn str "
+            sys.exit(1)
+        if sqlite_conn_str is None:
+            print "sqlite initialize error with no conn str "
+            sys.exit(1);
+        self.cs_db = CloudStackDb( cs_conn_str )
+        self.conn_str = sqlite_conn_str
+        self.engine = None
+        e=create_engine( self.conn_str,strategy='threadlocal', encoding='utf8', convert_unicode=True, echo = True) 
+        try:
+            os.stat(e.url.database)
+        except :#OSError
+            print " database not exist  , create it first"
+            cmd = raw_input( "create database or exit  ?  Y or n " )
+            if cmd == "Y":
+                e.echo = True
+                e.connect()
+                meta_data = MetaData( e )
+                self.create( meta_data   , e )
+                e.connect() # again
+            else:
+                sys.exit( 0 )
+        self.engine = e
+        self.engine.echo = False
+        self.metadata = MetaData( self.engine )
+        self.metadata.bind = self.engine
+        self.conn = self.engine.connect()
+        # configure Session class with desired options
+        Session = sessionmaker()
+        Session.configure(bind=self.engine)
+        self.session = Session()
+        # only for debug mode
+        self.is_drop_exist_table = False       
+
     def get_table( self, table_name ):
         t = Table( table_name , self.metadata , autoload= True )  
         return t 
@@ -87,5 +136,16 @@ class CloudStackDbMonitor:
             if "Y" == user_input:
                 hockey_table.drop(  engine )      
         pass
+    def init_tables( self ):
+        tlist = self.cs_db.metadata.tables.keys()
+        for t in tlist:
+            print t
+        pass
+    
+if __name__ == "__main__":
+    conn_str  = "sqlite:///cloudstack.sqlite"
+    cs_conn_str = ""
+    csdbm = CloudStackDbMonitor( conn_str )
+    csdbm.init_tables()
     
     
